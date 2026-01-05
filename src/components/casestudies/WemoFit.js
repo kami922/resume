@@ -308,8 +308,8 @@ export default function WemoFit() {
                         struggled with allowing public HTTP traffic while restricting direct EC2 access.
                     </Box>
                     <Box component={'p'} className={Style.text}>
-                        <strong>Solution:</strong> Created layered security group architecture: ALB SG (sg-0b8280e3c175cffa9) allows HTTP/80
-                        from 0.0.0.0/0. EC2 SG (sg-0270f5025eb974a2a) allows port 3000 only from ALB SG. RDS SG allows PostgreSQL/5432 from EC2 SG.
+                        <strong>Solution:</strong> Created layered security group architecture: ALB SG (sg-xxxxxxxxxxxxxxxxx) allows HTTP/80
+                        from 0.0.0.0/0. EC2 SG (sg-xxxxxxxxxxxxxxxxx) allows port 3000 only from ALB SG. RDS SG allows PostgreSQL/5432 from EC2 SG.
                         Used AWS CLI to query and document all security group configurations.
                     </Box>
 
