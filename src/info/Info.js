@@ -74,7 +74,7 @@ export const info = {
 // Just change the links so that they lead to your social profiles.
 
     ],
-    bio: "Hello! I'm Kamran I'm a studying Information technology At university of Education. I studied CompSci at Harvard, I Have Done 3 Internship in different web tech stacks and currently looking for devops internship.",
+    bio: "Full-stack developer and DevOps engineer with experience across multiple tech stacks including Ruby on Rails, Django, Laravel, and Python microservices. Completed three internships and an associate engineer role, specializing in backend development, Docker containerization, and AWS deployments. Currently studying Information Technology at University of Education and looking for new opportunities to contribute and grow in software development and DevOps.",
     skills:
         {
             proficientWith: ['javascript', 'react', 'git', 'github', 'Linux', 'Ci/Cd', 'Django','FastApi', 'Docker'],
@@ -103,34 +103,25 @@ export const info = {
     ],
     portfolio: [ // This is where your portfolio projects will be detailed
         {
-            title: "Project 1",
-            live: "https://paytonpierce.dev", //this should be a link to the live version of your project, think github pages, netlify, heroku, etc. Or your own domain, if you have it.
-            source: "https://github.com/paytonjewell", // this should be a link to the **repository** of the project, where the code is hosted.
-            image: mock1
+            title: "Multi-Vendor E-commerce Platform",
+            live: "/case-study/multi-vendor-ecommerce", // Link to case study
+            source: "https://github.com/kami922/Multi-Vendor-eCommerce-MERN-App", // GitHub repository
+            image: mock5,
+            caseStudy: true // Flag to indicate this has a case study
         },
         {
-            title: "Project 2",
-            live: "https://paytonpierce.dev",
-            source: "https://github.com/paytonjewell",
-            image: mock2
+            title: "Enterprise Social Media Management Platform",
+            live: "/case-study/nutz", // Link to case study
+            source: "", // Private company project - no public repository
+            image: mock2,
+            caseStudy: true // Flag to indicate this has a case study
         },
         {
-            title: "Project 3",
-            live: "https://paytonpierce.dev",
-            source: "https://github.com/paytonjewell",
-            image: mock3
-        },
-        {
-            title: "Project 4",
-            live: "https://paytonpierce.dev",
-            source: "https://github.com/paytonjewell",
-            image: mock4
-        },
-        {
-            title: "Project 5",
-            live: "https://paytonpierce.dev",
-            source: "https://github.com/paytonjewell",
-            image: mock5
+            title: "WemoFit - Fitness Platform DevOps Migration",
+            live: "/case-study/wemofit", // Link to case study
+            source: "https://acme.wemofit.io/", // Production deployment
+            image: mock3,
+            caseStudy: true // Flag to indicate this has a case study
         }
     ]
 }
