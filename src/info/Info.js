@@ -4,6 +4,7 @@ import mock2 from "../img/mock2.png"
 import mock3 from "../img/mock3.png"
 import mock4 from "../img/mock4.png"
 import mock5 from "../img/mock5.png"
+import { goresym } from "../img/GoResym.png";
 
 /* Hi there! Thanks for checking out my portfolio template. Be sure to read the comments to get a better understanding of
 how to make this template work best for you! */
@@ -127,7 +128,7 @@ export const info = {
             title: "GoReSym: Reconstructing Go Function Signatures",
             live: "/blog/goresym-function-signature-reconstruction",
             source: "",
-            image: mock1,
+            image: goresym,
             caseStudy: false,
             contentType: "blog"
         },
@@ -135,7 +136,7 @@ export const info = {
             title: "How I Built GoReSym's -strings Feature",
             live: "/blog/goresym-strings-feature",
             source: "",
-            image: mock4,
+            image: goresym,
             caseStudy: false,
             contentType: "blog"
         }

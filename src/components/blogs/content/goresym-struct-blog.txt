@@ -1,7 +1,8 @@
-            GoReSym blog define and apply
-            Struct issue 14
 
-            Title: Contributing to GoreSym: Go Function Signature Reconstruction
+      You can also read it here
+      https://steep-hawk-1bd.notion.site/GoReSym-blog-define-and-apply-Struct-issue-14-326ae886e455805a8c53f7ee3d4d3e3e
+
+            Contributing to GoreSym: Go Function Signature Reconstruction
 
 
             Go binaries are notoriously difficult to reverse engineer. Between the unique
