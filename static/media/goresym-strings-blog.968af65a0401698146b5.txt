@@ -1,15 +1,9 @@
-           GoReSym’blog Strings
-           Better blog structure:
-            Part 1 — Infrastructure (C1)          ← done ✓
-           Part 2 — The Algorithm, First Attempt (C2)
-           Part 3 — Proving Correctness (C4)     ← FLOSS comparison
-           Part 4 — Steve's Review (C5)          ← memory optimization
-           Part 5 — Four Bugs, One Fix (C7)      ← the payoff
 
 
+you can also read it here
+https://steep-hawk-1bd.notion.site/GoReSym-blog-Strings-322ae886e45580fb8143d7a22c105344
 
-
-           Title: How I Built the -strings Feature for Mandiant’s GoReSym
+           How I Built the -strings Feature for Mandiant’s GoReSym
            Go binaries are notoriously difficult to reverse engineer. Between the unique
            runtime structures and the way the pclntab handles metadata, extracting
            meaningful data from a compiled Go executable requires more than a standard
@@ -31,7 +25,7 @@
            bag starts empty. As GoReSym parses the binary it fills the bag — version,
 
 
-GoReSym’blog Strings                                                                              1
+
            functions, types, files. At the end, DataToJson converts the full bag into JSON and
            prints it to stdout.
            I added one line to the struct:
@@ -76,8 +70,7 @@ GoReSym’blog Strings                                                          
 
 
 
-
-GoReSym’blog Strings                                                                             2
+                                              
            you may skip this part if you want as there was a rewrite up later in part 5 where
            logic was changed but order of execution remains same.
            I added below 10 functions.
@@ -127,7 +120,7 @@ GoReSym’blog Strings                                                          
 
 
 
-GoReSym’blog Strings                                                                                    3
+
                    ↓
               returns []string to you
 
@@ -165,7 +158,7 @@ GoReSym’blog Strings                                                          
            Step 3.Scan for candidates
            it is findStringCandidates() function I have explain it below as well in its part.
 
-GoReSym’blog Strings                                                                                4
+                                                                             
            We walk through every data section byte by byte (in pointer-sized steps). At every
            position we read two values — a pointer and a length. We ask: could this be a real
            Go string struct?
@@ -201,7 +194,7 @@ GoReSym’blog Strings                                                          
 
 
 
-GoReSym’blog Strings                                                                                5
+
            It doesn't know which pairs are real. It collects everything that isn't obviously
            garbage. That's why the output is called candidates suspects, not confirmed
            strings.
@@ -240,7 +233,7 @@ GoReSym’blog Strings                                                          
            as candidates.
 
 
-GoReSym’blog Strings                                                                             6
+
            findLongestMonotonicRun()
            The single most important function in PR or the heart of it.
 
@@ -272,7 +265,7 @@ GoReSym’blog Strings                                                          
            string table candidates, after you sort the whole list by length, naturally cluster
 
 
-GoReSym’blog Strings                                                                             7
+
            together and form one enormous unbroken run 600 entries long.
            Garbage candidates have lengths that don't follow the compiler's sorted pattern
            — they intrude between real candidates and break the run.
@@ -307,7 +300,6 @@ GoReSym’blog Strings                                                          
                the outside and find the pattern. Once you have the start and end of that
 
 
-GoReSym’blog Strings                                                                                 8
                stretch, you hand those positions to extractString which finally opens each box
                and reads what's inside.
 
@@ -343,8 +335,7 @@ GoReSym’blog Strings                                                          
            dedicated Go string extractor ( floss/language/go/extract.py ) that is the basis of this
            PR’s algorithm.
 
-
-GoReSym’blog Strings                                                                                  9
+                                                                              9
            First changes in Pe.go, it is a mirror of the work done in elf.go from part 2 but for
            windows PE binaries.
            strings_tests.go are unit tests.
@@ -379,7 +370,7 @@ GoReSym’blog Strings                                                          
            returning all sections at once, iterateSections() takes a function as an argument
            and calls it once per section.
 
-GoReSym’blog Strings                                                                               10
+                                                                            
            Before:
             getSections() → returns [section1, section2, section3, section4]
            all 4 in memory at once
@@ -398,6 +389,5 @@ GoReSym’blog Strings                                                          
            var so these tools can use String output as well.
 
 
-
-
-GoReSym’blog Strings                                                                       11
+      Part 5 
+      Will write Soon its a big rewrite.
