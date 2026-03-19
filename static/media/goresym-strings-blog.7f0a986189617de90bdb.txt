@@ -1,0 +1,403 @@
+           GoReSym’blog Strings
+           Better blog structure:
+            Part 1 — Infrastructure (C1)          ← done ✓
+           Part 2 — The Algorithm, First Attempt (C2)
+           Part 3 — Proving Correctness (C4)     ← FLOSS comparison
+           Part 4 — Steve's Review (C5)          ← memory optimization
+           Part 5 — Four Bugs, One Fix (C7)      ← the payoff
+
+
+
+
+           Title: How I Built the -strings Feature for Mandiant’s GoReSym
+           Go binaries are notoriously difficult to reverse engineer. Between the unique
+           runtime structures and the way the pclntab handles metadata, extracting
+           meaningful data from a compiled Go executable requires more than a standard
+           strings utility.
+
+           Recently I added a -strings feature to Mandiant's GoReSym. The PR added around
+           3,000 lines total,but only ~1,000 is actual code. The other 2,000 are test and
+           reference files used to validate our output against FLOSS, Mandiant's own string
+           extraction tool. That validation is the interesting part and it's what caught four
+           bugs in our first attempt.
+
+
+
+
+           Part 1 . Laying the Infrastructure.
+           so Part 1 would be laying the infrastructure and it would include file main.go
+           The key concept here is ExtractMetadata and DataToJson .
+           Think of ExtractMetadata as a bag. When you run ./GoReSym -strings malware.exe , the
+           bag starts empty. As GoReSym parses the binary it fills the bag — version,
+
+
+GoReSym’blog Strings                                                                              1
+           functions, types, files. At the end, DataToJson converts the full bag into JSON and
+           prints it to stdout.
+           I added one line to the struct:
+            type ExtractMetadata struct {
+               ...
+                 StdFunctions   []FuncMetadata
+                 Strings        []string         // ← added
+           }
+
+           That single line automatically updated the JSON output. DataToJson uses Go's
+           json.MarshalIndent which works via reflection — at runtime Go reads the struct
+
+           definition, finds every exported field (capital letter), and converts it to JSON
+           without you writing any conversion code. Before this line, the JSON had no
+           Strings key. After it, the output gained:
+
+            "Strings": ["bool", "chan", "runtime.error", ...]
+
+           Zero changes to DataToJson itself.
+           The only manual work was printForHuman — GoReSym's -human mode, which prints
+           flat readable text instead of JSON. Unlike DataToJson , that's hand-written print
+           statements, so I had to add the -Strings- section explicitly.
+
+
+           Part 2
+           before Explaining this commit/changes , two concepts to understand first.
+
+
+           in C, a string is bytes ending in \x00 .
+           In Go, a string is a struct with two fields:
+            type string struct {
+                 ptr uintptr    // pointer to where the characters live in memory
+                 len int        // how many bytes
+           }
+
+           So in a compiled Go binary, wherever string metadata lives, you see pairs of
+           values: (pointer, length) . That's a StringCandidate .
+            type StringCandidate struct {
+                 Pointer uint64    // e.g. 0x406080   → points to "runtime.error" in .rodata
+                 Length   uint64   // e.g. 13         → len("runtime.error")
+           }
+
+
+
+
+GoReSym’blog Strings                                                                             2
+           you may skip this part if you want as there was a rewrite up later in part 5 where
+           logic was changed but order of execution remains same.
+           I added below 10 functions.
+            1. ExtractStrings()
+           2. extractStrings()
+           3. getSections()
+           4. isDataSection()
+           5. findStringCandidates()
+           6. findLongestMonotonicRun()
+           7. extractString()
+           8. isMostlyPrintable()
+           9. is64Bit()
+
+           10. isLittleEndian()
+
+            findStringCandidates()
+           findLongestMonotonicRun()
+           extractStrings()
+
+           these 3 are the most important in commit so I will explain these.
+           findStringCandidates() and findLongestMonotonicRun() are the main algos where
+           core logic lives.
+            findStringCandidates    scans raw bytes, finds all (pointer, length) pairs. This is where
+           we read the binary.
+                                 the brain. Takes thousands of candidates, finds the string
+            findLongestMonotonicRun
+
+           table by detecting the monotonic pattern. This is the entire algorithm in one
+           function.
+                        takes a single candidate, reads the actual characters from memory,
+            extractString
+
+           validates UTF-8, checks printability.
+
+           Full data flow, what calls what
+              file.ExtractStrings()
+                   ↓
+              loops over entries
+              calls entry.extractStrings()   for each one
+                   ↓
+              calls e.getSections()          → get all sections
+              calls isDataSection()          → filter to data sections only
+              calls findStringCandidates() → scan bytes, find (ptr,len) pairs
+              calls findLongestMonotonicRun() → find the string table
+              calls e.extractString()        → read actual characters for each candidate
+
+
+
+
+GoReSym’blog Strings                                                                                    3
+                   ↓
+              returns []string to you
+
+           Main.Go calls ExtractStrings function. Remember the 'Bag' (ExtractMetadata from
+           part 1) was ready to hold the strings, I had to actually go find them. This is where
+           the extractStrings logic comes in
+            ExtractStrings   loops over architectures, calls the real function, combines results.
+           No algorithm.
+                        the actual work. Gets sections →Check the Binary Type → scans for
+            extractStrings
+
+           candidates → finds string table → reads characters → returns strings.
+           Look carefully at the names:
+            func (f *File) ExtractStrings()     // capital E — public
+           func (e *Entry) extractStrings()    // lowercase e — private
+
+
+
+
+           extractStrings()
+           You can't just scan for null-terminated strings like the standard strings tool does
+           .Go strings aren't null-terminated. They're stored as (pointer, length) pairs pointing
+           into a blob of characters.
+           This functions extracts hundreds of strings like "bool", "runtime.error", "invalid
+           memory address" from go binary.
+           This function concludes itself in 5 steps.
+           Step 1.Get the Sections.
+           A binary is divided into sections. .text has machine code. .rodata has read-only
+           data (where the actual string characters live). .data has the pointer+length pairs.
+           We load all sections into memory.
+           Step 2 Check for Binary type
+           Is it 64-bit or 32-bit? Little-endian or big-endian? This tells us how many bytes to
+           read for each pointer and in what byte order. A 64-bit Windows binary uses 8-
+           byte pointers. A 32-bit Linux binary uses 4-byte pointers.
+           Step 3.Scan for candidates
+           it is findStringCandidates() function I have explain it below as well in its part.
+
+GoReSym’blog Strings                                                                                4
+           We walk through every data section byte by byte (in pointer-sized steps). At every
+           position we read two values — a pointer and a length. We ask: could this be a real
+           Go string struct?
+           If pointer is 0 → garbage, skip
+           If length is 0 → garbage, skip
+           If length is 100,000+ → garbage, skip
+           Everything that passes becomes a candidate. After scanning the whole binary we
+           might have 8,000 candidates. Most are garbage,random bytes that happened to
+           look like a pointer+length pair.
+
+
+           Step 4. Find the Real String Table
+           Here's the key insight: Go's compiler stores ALL strings sorted by length, shortest
+           first, in one contiguous block. So the pointer+length pairs for the real strings,
+           when read in order, have lengths that go: 4, 4, 4, 5, 5, 6, 7, 8... — never
+           decreasing. Hundreds of them in a row.
+           Random garbage candidates don't have this property. Their lengths jump around
+           randomly — 4, 9, 2, 15, 1... The run breaks after 2-3 entries.
+           So we sort all 8,000 candidates by length and find the longest sequence where
+           lengths never decrease. The real string table produces a run of 600+ entries.
+           Noise produces runs of 2-3. We take the winner.
+           Step 5 — Read the actual characters
+           Now we have 648 winning candidates. Each one says: "there's a string at address
+           0x406080 , length 4 ." We go to that address in the binary, read 4 bytes, get "bool" .
+
+           Validate it's real UTF-8 text. Check it's printable. Keep it.
+           Repeat 648 times. Done.
+
+
+           findStringCandidates()
+           This function receives bytes from a section like .data and walks through it looking
+           for pairs of numbers that could be a (pointer, length) string struct.
+
+
+
+GoReSym’blog Strings                                                                                5
+           It doesn't know which pairs are real. It collects everything that isn't obviously
+           garbage. That's why the output is called candidates suspects, not confirmed
+           strings.
+           let’s suppose it receives below arguments
+            data        = raw bytes of the .data section
+           baseAddr    = 0x6A0000   (where this section starts in memory)
+           is64bit   = true
+           isLittleEndian = true
+
+
+
+
+           it walks through the bytes in steps of 8 on 64-bit (or 4 on 32-bit) — not byte by
+           byte. The reason is alignment: Go string structs always sit at pointer-aligned
+           addresses. Stepping by 1 would read overlapping garbage values.
+           At each position it does two things:
+                 reads bytes in the correct order based on endianness (little-endian → least
+                 significant byte first) to get the actual pointer and length values
+                 rejects obvious garbage: ptr == 0 (null pointer), length == 0 (empty
+                 string), length > 100000 (no real Go string is 100KB long)
+           Everything that passes gets added to a slice called candidates and returned.
+
+
+           Concept: Endianness
+           Endianness is just which end of a number gets stored first in memory. Here we are
+           checking for little endianess which means least significant byte first.
+           The number `0x0400` stored in memory can be laid out two ways:
+                 Little-endian (x86, ARM): `00 04` — least significant byte first
+                 Big-endian (MIPS, PowerPC): `04 00` — most significant byte first
+           If you read the bytes in the wrong order you get a completely wrong number.
+
+
+           in summary.
+           Walk through the raw bytes of a section in pointer-sized steps, read every pair of
+           numbers as a (pointer, length) , reject obvious garbage, and return everything else
+           as candidates.
+
+
+GoReSym’blog Strings                                                                             6
+           findLongestMonotonicRun()
+           The single most important function in PR or the heart of it.
+
+           The problem we have is we get candidates from findStringCandidates, it still
+           contains garbage values. findStringCandidates removes the obviously fake IDs, The
+           ones with no photo, no name, expired dates. But thousands of fake IDs still look
+           real on the surface. findLongestMonotonicRun is the deeper check that catches the
+           rest.We
+           need a fast way to identify which candidates belong to the real string table
+           without reading any bytes from the binary.
+           The Go compiler gives us a free clue,it always sorts strings by length. This means
+           the real string table candidates, somewhere in candidates slice, form a sorted
+           sequence. If you could find that sequence, you've found the string table.
+           The question becomes: find the longest sorted subsequence in a list of
+           numbers.
+           Step 1 . Sort by length
+           Sort all candidates by length. This puts the string table candidates adjacent to
+           each other,they'll cluster into one long monotonic run.
+           Step 2. Walk through and find runs
+           Now walk through the sorted list one by one. You're looking for the longest stretch
+           where lengths never go down.
+           Start counting. As long as each length is equal to or bigger than the previous one
+           — keep counting. The moment a length is smaller than the previous one — the run
+           breaks. Record how long that run was. Start counting again from zero.
+           Do this for the entire list. Remember the longest run you found.
+
+           Step 3. Why the real string table wins
+           The Go compiler sorted all real strings by length before storing them. So the real
+           string table candidates, after you sort the whole list by length, naturally cluster
+
+
+GoReSym’blog Strings                                                                             7
+           together and form one enormous unbroken run 600 entries long.
+           Garbage candidates have lengths that don't follow the compiler's sorted pattern
+           — they intrude between real candidates and break the run.
+           The real string table's run is so much longer than any noise run that it stands out
+           completely.
+
+           Step 4 — Minimum check
+           If the longest run found is less than 10 . return nothing. A real Go binary will always
+           have hundreds of strings. A run of 9 or less is just noise.
+
+
+           It returns two numbers — the index where the winning run starts and where it
+           ends. Nothing else. No strings, no bytes read. extractStrings then loops between
+           those two indices and calls extractString on each one.
+
+
+           I used AI to explain it via an analogy.
+               Imagine you're in a warehouse with thousands of boxes. Each box has a
+               number written on it — its size. Most boxes are fake, planted by someone to
+               confuse you. A few hundred are real and were packed by a careful librarian who
+               always packs boxes in order — smallest to largest, never out of sequence.
+               You can't open the boxes yet. You can only read the numbers on the outside.
+               So you line up all the boxes by their number — smallest on the left, largest on
+               the right. Now walk from left to right and count how long you can go without the
+               number ever dropping. The fake boxes were packed randomly — their numbers
+               jump up and down, breaking your count after 2 or 3 boxes. But the librarian's
+               boxes were packed in order — they form one long unbroken sequence of
+               hundreds.
+               The longest unbroken stretch you find — that's the librarian's boxes. Those are
+               your real strings.
+               You don't open a single box during this process. You just read the numbers on
+               the outside and find the pattern. Once you have the start and end of that
+
+
+GoReSym’blog Strings                                                                                 8
+               stretch, you hand those positions to extractString which finally opens each box
+               and reads what's inside.
+
+
+            extractString()
+
+           Takes one winning candidate (pointer=0x406080, length=4) . Goes to that address.
+           Reads 4 bytes. Gets "bool" . Validates UTF-8. Checks 80% printable. Returns it.
+           Called 648 times.
+
+
+            elf.go     — Three Helper Methods
+           GoReSym already had an ELF parser. I just needed to expose three things our
+           algorithm required. getSections() loops through f.elf.Sections (Go's standard
+           library ELF parser) and wraps each section into our own Section struct — name,
+           address, raw bytes. is64Bit() reads the Class field from the ELF header — either
+            ELFCLASS64 or ELFCLASS32 , one line. isLittleEndian() reads the Data field —
+
+            ELFDATA2LSB means little-endian, ELFDATA2MSB means big-endian.
+
+           Why are these in elf.go and not strings.go ? Because strings.go is format-agnostic
+           — it doesn't know or care whether it's ELF, PE, or Mach-O. It just calls is64Bit()
+           and trusts the answer. Each format implements its own version. Same question,
+           different knowledge to answer it.
+
+
+
+
+           Part 3. Proving Correctness. Validating it
+           against FLOSS.
+           commit hash # 99633f0
+           Floss is an obfuscated string extractor tool developed by Mandiant It has a
+           dedicated Go string extractor ( floss/language/go/extract.py ) that is the basis of this
+           PR’s algorithm.
+
+
+GoReSym’blog Strings                                                                                  9
+           First changes in Pe.go, it is a mirror of the work done in elf.go from part 2 but for
+           windows PE binaries.
+           strings_tests.go are unit tests.
+           floss_referect.txt contains output from floss program ran on a testprogram binary.
+            strings_floss_test.gotell us match rate against floss_referece.txt. it reads the
+           file,strips the addresses and just keeps the string. Stores them in a look up table.
+           Then we ran our own extractor on same binary and get our list of strings. It then
+           compares/checks. For every string we extracted, check if FLOSS also found it.
+           Count the matches. Divide by our total. That's the match rate.
+           If the match rate drops below 95% — test fails. This means if someone breaks the
+           algorithm in a future commit, CI catches it automatically.
+           We got 99.2%. 648 out of 653 matched. The test passed. But those 5 mismatches
+           weren't ignored they were hints pointing at bugs in our algorithm that we fixed
+           later in last Part (commit hash eeff248).
+
+
+
+           Part 4 Addressing Feedback and Memory Optimization.
+           Here I addressed Feedback from maintainer which would address in Memory
+           optimization, Missing Helper Function for mach-o binary like above in elf and pe
+           .go files. we used f.macho.Sections to get macos sections which is standard go
+           library.
+
+
+           Now to explain Memory optimization it was an architectural change. Earlier
+           function logic was to get all sections at once,store them in a slice then processed
+           it. This way it was hoarding memory in RAM which was a waste. New function
+           logic was to get section processed it using a callback function then use garbage
+           collector to free up space. Also I changed function name from getSections() to
+           iterateSections()
+           A callback is just a function you pass to another function. Instead of getSections()
+           returning all sections at once, iterateSections() takes a function as an argument
+           and calls it once per section.
+
+GoReSym’blog Strings                                                                               10
+           Before:
+            getSections() → returns [section1, section2, section3, section4]
+           all 4 in memory at once
+           then you loop through them
+
+           After:
+            iterateSections(myFunction)
+              → loads section1 → calls myFunction(section1) → frees section1
+              → loads section2 → calls myFunction(section2) → frees section2
+              → loads section3 → calls myFunction(section3) → frees section3
+
+           Same result. Never more than one section in memory at a time.
+
+
+           GoReSym.proto change was for IDA and ghidra tools. We added a repeated string
+           var so these tools can use String output as well.
+
+
+
+
+GoReSym’blog Strings                                                                       11
