@@ -1,0 +1,119 @@
+            GoReSym blog define and apply
+            Struct issue 14
+
+            Title: Contributing to GoreSym: Go Function Signature Reconstruction
+
+
+            Go binaries are notoriously difficult to reverse engineer. Between the unique
+            runtime structures and the way the pclntab handles metadata, extracting
+            meaningful data from a compiled Go executable requires more than a standard
+            strings utility.
+            GoReSym extracts metadata from compiled Go binaries. One of its core features is
+            **type reconstruction** .It reads Go's internal type descriptors baked into the
+            binary and outputs them as C-style definitions that IDA Pro can understand and
+            apply.
+            Before this PR, GoReSym already reconstructed many Go types:
+                  Structs → `struct { field type; ... }`
+                  Slices → `struct { ptr; len; cap }`
+                  Arrays → `typedef elem name[len]`
+                  Pointers → `typedef elem* name`
+                  Interfaces → `struct` with method members
+                  Scalars (int, bool, float) → C typedefs
+                  *But function types (`Kind == Func`) were completely ignored.* The old
+                  code was a ~12-line stub that emitted `void*` for every function type,
+                  regardless of what parameters or return types it actually had.
+            This meant IDA had no way to understand function signatures from GoReSym's
+            output. Issue #14 asked to fix this ,extract the actual parameter and return type
+
+
+
+GoReSym blog define and apply Struct issue 14                                                   1
+            information from Go's function type metadata, and emit proper C-style typedefs
+            that IDA can ingest.
+
+
+            Before Diving deep into the solution here are somethings you should read which
+            will further aid your comprehension of the solution I am coming up (still working
+            on it ).
+
+            Signature.
+            A function signature is the complete description of a function's interface — its
+            name, what goes in, and what comes out:
+             func Add(a int, b int) int
+            //        ↑ inputs        ↑ output
+
+            That's the signature. Not the body, not the implementation — just the contract:
+            "give me two ints, I give you one int back
+
+
+            Type reconstruction.
+            Same idea as signature reconstruction but broader, recovering the shape of any
+            data type from binary metadata, not just functions.
+
+
+            objfile.go
+
+            what old logic was doing was just returning only void
+
+
+
+
+            new logic explained step by step
+            Step 1 — Find where the counts live in memory
+            Every Go function type stored in the binary has a small header. After the standard
+            type info (size, name, etc.), there are two numbers sitting next to each other: how
+            many parameters go in, and how many values come out. The code calculates the
+            exact memory addresses of those two numbers.
+
+
+GoReSym blog define and apply Struct issue 14                                                     2
+            Step 2 — Read those two numbers
+            It reads 2 bytes from each address to get the actual counts. It has to be careful
+            about byte order — some processors store numbers with the big byte first, some
+            with the small byte first. The code handles both cases.
+            Step 3 — Check if the function is variadic
+            Go stores a secret flag inside the "how many outputs" number. It uses the very
+            first bit (the topmost bit) as a yes/no flag for whether the function accepts a
+            variable number of arguments (like ...int ). The code pulls that flag out and then
+            removes it so the remaining bits give the real output count.
+            Step 4 — Find where the parameter type list starts
+            Right after those two count numbers, the binary stores a flat list of pointers. Each
+            pointer points to a full type descriptor for one parameter. The code figures out the
+            exact address where this list begins.
+            Step 5 — Look up what each parameter's type actually is
+            For each input parameter, the code follows the pointer to that parameter's type
+            descriptor and calls itself recursively to parse it. This means if a parameter is a
+            pointer to a struct, it will fully parse the struct too. It collects the human-readable
+            C type name for each one. It does the exact same thing for return values, just
+            starting further along in the list.
+            Step 6 — Build the final C string
+            With all the type names collected, it assembles a C function pointer definition. If
+            there's one return value, it becomes the return type. If there are zero, it uses void .
+            If there are multiple (which C can't express natively), it writes void and puts the
+            actual types in a comment. The parameter list gets joined with commas, and if the
+            function was variadic, ... gets added at the end. The result looks like a real C
+            typedef that IDA can import.
+
+
+            in Goresym_rename.py
+
+            A new function called apply_function_type was added to the script. It accepts an
+            address, a function name, and the types dictionary. It currently does nothing — its
+            entire body is just pass . It exists as a named placeholder so the structure is there
+            for whoever implements it next. The comment explains the three things that would
+
+
+
+GoReSym blog define and apply Struct issue 14                                                         3
+            need to happen: extract the signature from IDA's analysis, match it against the
+            reconstructed types, and apply the matching type to the function.
+
+
+
+
+            more coming Soon.
+
+
+
+
+GoReSym blog define and apply Struct issue 14                                                 4
