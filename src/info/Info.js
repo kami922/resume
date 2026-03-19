@@ -122,6 +122,22 @@ export const info = {
             source: "https://acme.wemofit.io/", // Production deployment
             image: mock3,
             caseStudy: true // Flag to indicate this has a case study
+        },
+        {
+            title: "GoReSym: Reconstructing Go Function Signatures",
+            live: "/blog/goresym-function-signature-reconstruction",
+            source: "",
+            image: mock1,
+            caseStudy: false,
+            contentType: "blog"
+        },
+        {
+            title: "How I Built GoReSym's -strings Feature",
+            live: "/blog/goresym-strings-feature",
+            source: "",
+            image: mock4,
+            caseStudy: false,
+            contentType: "blog"
         }
     ]
 }

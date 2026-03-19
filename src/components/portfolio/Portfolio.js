@@ -15,6 +15,7 @@ export default function Portfolio({innerRef}) {
                            source={project.source}
                            title={project.title}
                            caseStudy={project.caseStudy}
+                           contentType={project.contentType}
                        />
                    </Grid>
                 ))}
